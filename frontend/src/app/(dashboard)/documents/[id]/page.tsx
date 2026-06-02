@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FileText, Bot, ShieldAlert, CheckCircle, ArrowLeft, RefreshCw, MessageSquare } from 'lucide-react'
+import { FileText, Bot, ShieldAlert, CheckCircle, ArrowLeft, RefreshCw, MessageSquare, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
 import { useAuthStore } from '@/stores/authStore'
 import { StatusBadge } from '@/components/documents/StatusBadge'
@@ -112,13 +112,20 @@ export default function DocumentDetailPage() {
               <span className="text-xs text-muted-foreground">Uploaded {formatDate(document.created_at)}</span>
             </div>
             {document.status === 'analyzed' && (
-              <div className="mt-3">
+              <div className="mt-3 flex flex-wrap gap-2">
                 <Link
                   href={`/documents/${document.id}/chat`}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
                 >
                   <MessageSquare size={13} />
                   Chat with document
+                </Link>
+                <Link
+                  href={`/documents/${document.id}/review`}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+                >
+                  <ClipboardList size={13} />
+                  Review workflow
                 </Link>
               </div>
             )}
