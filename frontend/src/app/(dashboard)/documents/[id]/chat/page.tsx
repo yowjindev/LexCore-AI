@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { ArrowLeft, Send, Bot, User, FileText, Loader2, MessageSquare, Plus } from 'lucide-react'
 import Link from 'next/link'
+import ReactMarkdown from 'react-markdown'
 import { getDocument } from '@/lib/api/documents'
 import { listConversations, startConversation, sendMessage, getMessages } from '@/lib/api/conversations'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
@@ -39,7 +40,27 @@ function MessageBubble({ msg }: { msg: ConversationMessage }) {
         {isUser ? <User size={14} /> : <Bot size={14} />}
       </div>
       <div className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm leading-relaxed ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}>
-        {msg.content}
+        {isUser ? (
+          <span>{msg.content}</span>
+        ) : (
+          <ReactMarkdown
+            components={{
+              p:      ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+              em:     ({ children }) => <em className="italic">{children}</em>,
+              ul:     ({ children }) => <ul className="ml-4 mb-1.5 list-disc space-y-0.5">{children}</ul>,
+              ol:     ({ children }) => <ol className="ml-4 mb-1.5 list-decimal space-y-0.5">{children}</ol>,
+              li:     ({ children }) => <li>{children}</li>,
+              h1:     ({ children }) => <h1 className="text-base font-semibold mb-1">{children}</h1>,
+              h2:     ({ children }) => <h2 className="text-sm font-semibold mb-1">{children}</h2>,
+              h3:     ({ children }) => <h3 className="text-sm font-semibold mb-0.5">{children}</h3>,
+              code:   ({ children }) => <code className="rounded bg-black/10 px-1 py-0.5 text-xs font-mono">{children}</code>,
+              blockquote: ({ children }) => <blockquote className="border-l-2 border-current/30 pl-3 italic opacity-80">{children}</blockquote>,
+            }}
+          >
+            {msg.content}
+          </ReactMarkdown>
+        )}
         {msg.cited_chunks && msg.cited_chunks.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1 border-t border-border/30 pt-2">
             {msg.cited_chunks.map((c) => (
