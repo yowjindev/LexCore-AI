@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         App\Modules\Compliance\Providers\ComplianceServiceProvider::class,
         App\Modules\AI\Providers\AIServiceProvider::class,
         App\Modules\Superadmin\Providers\SuperadminServiceProvider::class,
+        App\Modules\Workflow\Providers\WorkflowServiceProvider::class,
     ])
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (AppException $e, Request $request) {
