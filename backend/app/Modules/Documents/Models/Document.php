@@ -30,14 +30,15 @@ class Document extends Model
 
     protected $fillable = [
         'organization_id', 'uploaded_by', 'title', 'original_filename',
-        'mime_type', 'file_size', 's3_path', 'status', 'category', 'tags',
+        'mime_type', 'file_size', 's3_path', 'status', 'contains_pii', 'category', 'tags',
     ];
 
     protected function casts(): array
     {
         return [
-            'tags'      => 'array',
-            'file_size' => 'integer',
+            'tags'         => 'array',
+            'file_size'    => 'integer',
+            'contains_pii' => 'boolean',
         ];
     }
 

@@ -89,6 +89,8 @@ class AIServiceProvider extends ServiceProvider
         );
         $this->app->singleton(\App\Modules\AI\Embeddings\Services\SemanticSearchService::class);
         $this->app->singleton(\App\Modules\Documents\Services\ChatService::class);
+
+        $this->app->singleton(\App\Modules\AI\Security\PiiScanner::class);
     }
 
     public function boot(): void
@@ -103,5 +105,8 @@ class AIServiceProvider extends ServiceProvider
         Event::listen(DocumentAnalysisCompleted::class, [LogDocumentAnalysisActivity::class, 'handle']);
         Event::listen(DocumentAnalysisCompleted::class, [DispatchRiskDetection::class, 'handle']);
         Event::listen(DocumentAnalysisCompleted::class, [\App\Modules\AI\Embeddings\Listeners\DispatchEmbedding::class, 'handle']);
+
+        // PII scanning on OCR completion
+        Event::listen(OCRCompleted::class, [\App\Modules\Documents\Listeners\ScanForPii::class, 'handle']);
     }
 }
