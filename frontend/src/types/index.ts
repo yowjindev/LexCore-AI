@@ -6,6 +6,7 @@ export interface User {
   email: string
   organization_id: string
   roles: string[]
+  permissions?: string[]
   created_at: string
 }
 
