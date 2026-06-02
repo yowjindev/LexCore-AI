@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
@@ -11,29 +10,28 @@ import { Header } from './Header'
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const { isPending } = useAuth()
   const queryClient = useQueryClient()
-  const router = useRouter()
 
   useEffect(() => {
-    const refreshQueries = (): void => {
-      // Invalidate all cached query data AND bust Next.js router cache
-      queryClient.invalidateQueries()
-      router.refresh()
+    // Force all active queries to immediately refetch when navigating back/forward
+    // or restoring from the browser's back/forward cache (bfcache).
+    // { refetchType: 'all' } triggers an active network request right now
+    // rather than just marking data as stale for the next render cycle.
+    const refetchAll = (): void => {
+      queryClient.invalidateQueries({ refetchType: 'all' })
     }
 
     const handlePageShow = (event: PageTransitionEvent): void => {
-      if (event.persisted) {
-        refreshQueries()
-      }
+      if (event.persisted) refetchAll()   // bfcache restore
     }
 
-    window.addEventListener('popstate', refreshQueries)
+    window.addEventListener('popstate', refetchAll)
     window.addEventListener('pageshow', handlePageShow)
 
     return () => {
-      window.removeEventListener('popstate', refreshQueries)
+      window.removeEventListener('popstate', refetchAll)
       window.removeEventListener('pageshow', handlePageShow)
     }
-  }, [queryClient, router])
+  }, [queryClient])
 
   if (isPending) {
     return (
