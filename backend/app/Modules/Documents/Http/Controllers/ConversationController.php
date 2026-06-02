@@ -4,6 +4,7 @@ namespace App\Modules\Documents\Http\Controllers;
 
 use App\Exceptions\Documents\DocumentNotFoundException;
 use App\Exceptions\ForbiddenException;
+use App\Modules\Auth\Models\AuditLog;
 use App\Modules\Documents\DTOs\ChatResponse;
 use App\Modules\Documents\Models\Document;
 use App\Modules\Documents\Models\DocumentConversation;
@@ -63,6 +64,19 @@ class ConversationController extends Controller
             $request->string('message')->toString(),
         );
 
+        AuditLog::create([
+            'organization_id' => $request->user()->organization_id,
+            'user_id'         => $request->user()->id,
+            'action'          => 'chat.message.sent',
+            'auditable_type'  => 'document',
+            'auditable_id'    => $document->id,
+            'metadata'        => [
+                'conversation_id' => $chat->conversationId,
+                'prompt_tokens'   => $chat->promptTokens,
+                'model'           => $chat->model,
+            ],
+        ]);
+
         return response()->json([
             'success' => true,
             'data'    => $this->formatChatResponse($chat),
@@ -92,6 +106,19 @@ class ConversationController extends Controller
             $request->string('message')->toString(),
             $conversation,
         );
+
+        AuditLog::create([
+            'organization_id' => $request->user()->organization_id,
+            'user_id'         => $request->user()->id,
+            'action'          => 'chat.message.sent',
+            'auditable_type'  => 'document',
+            'auditable_id'    => $document->id,
+            'metadata'        => [
+                'conversation_id' => $chat->conversationId,
+                'prompt_tokens'   => $chat->promptTokens,
+                'model'           => $chat->model,
+            ],
+        ]);
 
         return response()->json([
             'success' => true,

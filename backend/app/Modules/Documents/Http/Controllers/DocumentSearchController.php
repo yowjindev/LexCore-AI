@@ -4,6 +4,7 @@ namespace App\Modules\Documents\Http\Controllers;
 
 use App\Modules\AI\Embeddings\DTOs\SearchResult;
 use App\Modules\AI\Embeddings\Services\SemanticSearchService;
+use App\Modules\Auth\Models\AuditLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -26,6 +27,19 @@ class DocumentSearchController extends Controller
             $query,
             $limit,
         );
+
+        AuditLog::create([
+            'organization_id' => $request->user()->organization_id,
+            'user_id'         => $request->user()->id,
+            'action'          => 'search.query.executed',
+            'auditable_type'  => 'search',
+            'auditable_id'    => null,
+            'metadata'        => [
+                'query'        => $query,
+                'result_count' => count($results),
+                'limit'        => $limit,
+            ],
+        ]);
 
         return response()->json([
             'success' => true,

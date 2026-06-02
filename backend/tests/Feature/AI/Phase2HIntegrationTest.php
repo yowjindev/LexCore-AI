@@ -68,4 +68,53 @@ class Phase2HIntegrationTest extends TestCase
         $this->assertNotNull($req->raw_response);
         $this->assertSame('The answer is yes.', $req->raw_response);
     }
+
+    public function test_chat_creates_audit_log_entry(): void
+    {
+        $org  = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('admin');
+        $doc  = Document::factory()->create([
+            'organization_id' => $org->id,
+            'status'          => Document::STATUS_ANALYZED,
+        ]);
+
+        $this->mock(AIClientContract::class, fn ($m) =>
+            $m->shouldReceive('complete')->andReturn(new AIResponse('Yes.', 50, 25, 'test'))
+        );
+        $this->mock(EmbeddingClientContract::class, fn ($m) =>
+            $m->shouldReceive('embed')->andReturn(array_fill(0, 3072, 0.1))
+        );
+
+        $this->actingAs($user)
+            ->postJson("/api/v1/documents/{$doc->id}/conversations", ['message' => 'Is the lease valid?'])
+            ->assertStatus(201);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id'        => $user->id,
+            'action'         => 'chat.message.sent',
+            'auditable_type' => 'document',
+            'auditable_id'   => $doc->id,
+        ]);
+    }
+
+    public function test_search_creates_audit_log_entry(): void
+    {
+        $org  = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('staff');
+
+        $this->mock(EmbeddingClientContract::class, fn ($m) =>
+            $m->shouldReceive('embed')->andReturn(array_fill(0, 3072, 0.1))
+        );
+
+        $this->actingAs($user)
+            ->getJson('/api/v1/documents/search?q=lease+amount')
+            ->assertStatus(200);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id' => $user->id,
+            'action'  => 'search.query.executed',
+        ]);
+    }
 }
