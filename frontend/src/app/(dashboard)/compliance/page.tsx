@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ShieldAlert, CheckCircle, Bot, FileText } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
@@ -8,6 +10,7 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { listFlags, resolveFlag } from '@/lib/api/compliance'
+import { parseApiError } from '@/lib/errors'
 import type { ComplianceFlag } from '@/types'
 
 function formatDate(date: string | null): string {
@@ -34,9 +37,14 @@ export default function CompliancePage() {
     queryFn:  () => listFlags(),
   })
 
+  const [resolveError, setResolveError] = useState('')
   const resolve = useMutation({
     mutationFn: (id: string) => resolveFlag(id),
-    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['compliance', 'flags'] }),
+    onSuccess:  () => {
+      setResolveError('')
+      queryClient.invalidateQueries({ queryKey: ['compliance', 'flags'] })
+    },
+    onError: (err) => setResolveError(parseApiError(err)),
   })
 
   const allFlags: ComplianceFlag[] = data?.data ?? []
@@ -93,6 +101,10 @@ export default function CompliancePage() {
           title="No compliance flags"
           description="Flags will appear here once AI analysis detects compliance issues."
         />
+      )}
+
+      {resolveError && (
+        <p className="text-sm text-destructive">{resolveError}</p>
       )}
 
       {!isPending && !isError && groupedFlags.length > 0 && (

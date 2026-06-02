@@ -7,7 +7,7 @@ class ResolveComplianceFlagRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->hasAnyRole(['admin', 'manager']) ?? false;
+        return $this->user()?->hasAnyRole(['admin', 'manager', 'superadmin']) ?? false;
     }
 
     public function rules(): array
