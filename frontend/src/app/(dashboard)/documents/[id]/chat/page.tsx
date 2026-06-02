@@ -3,10 +3,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { ArrowLeft, Send, Bot, User, FileText, Loader2 } from 'lucide-react'
+import { ArrowLeft, Send, Bot, User, FileText, Loader2, MessageSquare, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { getDocument } from '@/lib/api/documents'
-import { startConversation, sendMessage, getMessages } from '@/lib/api/conversations'
+import { listConversations, startConversation, sendMessage, getMessages } from '@/lib/api/conversations'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { parseApiError } from '@/lib/errors'
 import type { ConversationMessage, CitedChunk, ChatReply } from '@/types'
@@ -20,7 +20,7 @@ function CitationBadge({ chunk }: { chunk: CitedChunk }) {
         className="ml-1 inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
       >
         <FileText size={10} />
-        chunk {chunk.chunk_index + 1}
+        source {chunk.chunk_index + 1}
       </button>
       {open && (
         <span className="mt-1 block rounded-lg border border-border bg-muted p-2 text-xs text-muted-foreground leading-relaxed">
@@ -54,73 +54,77 @@ function MessageBubble({ msg }: { msg: ConversationMessage }) {
 
 export default function ChatPage() {
   const { id } = useParams<{ id: string }>()
-  const [input, setInput]                       = useState('')
-  const [conversationId, setConversationId]     = useState<string | null>(null)
-  const [localMessages, setLocalMessages]       = useState<ConversationMessage[]>([])
-  const bottomRef                               = useRef<HTMLDivElement>(null)
+  const [input, setInput]                   = useState('')
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [localMessages, setLocalMessages]   = useState<ConversationMessage[]>([])
+  const [restored, setRestored]             = useState(false)
+  const bottomRef                           = useRef<HTMLDivElement>(null)
 
+  // Fetch document
   const { data: doc, isPending: docPending } = useQuery({
     queryKey: ['documents', id],
     queryFn:  () => getDocument(id),
   })
 
-  const { data: historyData } = useQuery({
+  // Fetch user's existing conversations for this document
+  const { data: conversationsData, isPending: convsPending } = useQuery({
+    queryKey: ['conversations', id],
+    queryFn:  () => listConversations(id),
+    enabled:  !!id,
+  })
+
+  // On first load, auto-select the most recent conversation
+  useEffect(() => {
+    if (restored || convsPending) return
+    const convs = conversationsData?.data ?? []
+    if (convs.length > 0) {
+      setConversationId(convs[0].id) // sorted by updated_at desc from API
+    }
+    setRestored(true)
+  }, [conversationsData, convsPending, restored])
+
+  // Fetch message history when a conversation is selected and we have no local messages
+  const { data: historyData, isPending: historyPending } = useQuery({
     queryKey: ['chat-messages', id, conversationId],
     queryFn:  () => getMessages(id, conversationId!),
     enabled:  !!conversationId && localMessages.length === 0,
   })
 
+  // Populate local messages from history (only on initial load)
   useEffect(() => {
     if (historyData?.data && localMessages.length === 0) {
       setLocalMessages(historyData.data)
     }
   }, [historyData])
 
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [localMessages])
 
   const send = useMutation({
     mutationFn: async ({ message, convId }: { message: string; convId: string | null }): Promise<ChatReply> => {
-      if (convId) {
-        return sendMessage(id, convId, message)
-      }
+      if (convId) return sendMessage(id, convId, message)
       return startConversation(id, message)
     },
     onMutate: ({ message }) => {
-      const optimisticUser: ConversationMessage = {
+      setLocalMessages((prev) => [...prev, {
         id:           'optimistic-' + Date.now(),
         role:         'user',
         content:      message,
         cited_chunks: null,
         created_at:   new Date().toISOString(),
-      }
-      setLocalMessages((prev) => [...prev, optimisticUser])
+      }])
     },
     onSuccess: (reply, variables) => {
       if (!conversationId) setConversationId(reply.conversation_id)
-      const confirmedUser: ConversationMessage = {
-        id:           reply.message_id + '-user',
-        role:         'user',
-        content:      variables.message,
-        cited_chunks: null,
-        created_at:   new Date().toISOString(),
-      }
-      const assistantMsg: ConversationMessage = {
-        id:           reply.message_id,
-        role:         'assistant',
-        content:      reply.content,
-        cited_chunks: reply.cited_chunks,
-        created_at:   new Date().toISOString(),
-      }
       setLocalMessages((prev) => [
         ...prev.filter((m) => !m.id.startsWith('optimistic-')),
-        confirmedUser,
-        assistantMsg,
+        { id: reply.message_id + '-user', role: 'user', content: variables.message, cited_chunks: null, created_at: new Date().toISOString() },
+        { id: reply.message_id, role: 'assistant', content: reply.content, cited_chunks: reply.cited_chunks, created_at: new Date().toISOString() },
       ])
     },
     onError: () => {
-      // Remove optimistic message on error
       setLocalMessages((prev) => prev.filter((m) => !m.id.startsWith('optimistic-')))
     },
   })
@@ -133,7 +137,15 @@ export default function ChatPage() {
     send.mutate({ message: msg, convId: conversationId })
   }
 
-  if (docPending) {
+  function startNewConversation() {
+    setConversationId(null)
+    setLocalMessages([])
+    setRestored(true)
+  }
+
+  const isLoading = docPending || convsPending || (!!conversationId && historyPending && localMessages.length === 0)
+
+  if (isLoading) {
     return (
       <div className="flex justify-center py-16">
         <LoadingSpinner />
@@ -147,18 +159,26 @@ export default function ChatPage() {
     <div className="flex flex-col h-[calc(100vh-8rem)] max-w-2xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 pb-4 border-b border-border shrink-0">
-        <Link
-          href={`/documents/${id}`}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-        >
+        <Link href={`/documents/${id}`} className="text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft size={16} />
         </Link>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground truncate">
             {doc?.title ?? doc?.original_filename ?? '…'}
           </p>
           <p className="text-xs text-muted-foreground">AI Document Chat</p>
         </div>
+        {/* New conversation button — only show if there's an active conversation */}
+        {conversationId && !notReady && (
+          <button
+            onClick={startNewConversation}
+            title="Start a new conversation"
+            className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          >
+            <Plus size={12} />
+            New chat
+          </button>
+        )}
       </div>
 
       {/* Not ready */}
@@ -168,18 +188,16 @@ export default function ChatPage() {
             <Bot size={32} className="mx-auto mb-3" />
             <p className="text-sm font-medium">Document not ready for chat</p>
             <p className="text-xs mt-1">The document must be fully analyzed first.</p>
-            <p className="text-xs mt-0.5">
-              Current status: <span className="font-medium">{doc?.status ?? '…'}</span>
-            </p>
+            <p className="text-xs mt-0.5">Current status: <span className="font-medium">{doc?.status ?? '…'}</span></p>
           </div>
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty state — no prior conversations, no messages yet */}
       {!notReady && localMessages.length === 0 && (
         <div className="flex flex-1 items-center justify-center">
           <div className="text-center text-muted-foreground">
-            <Bot size={32} className="mx-auto mb-3" />
+            <MessageSquare size={32} className="mx-auto mb-3" />
             <p className="text-sm font-medium">Ask anything about this document</p>
             <p className="text-xs mt-1">Answers are grounded in the document text with citations.</p>
           </div>

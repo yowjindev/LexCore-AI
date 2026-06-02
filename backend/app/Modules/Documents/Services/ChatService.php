@@ -54,6 +54,10 @@ class ChatService
         $response    = $this->aiClient->complete($prompt);
         $citedChunks = $this->parseCitations($response->content, $chunks);
 
+        // Strip [CHUNK:uuid] markers from the displayed content — citations are
+        // already captured in citedChunks and rendered as clickable badges.
+        $cleanContent = trim(preg_replace('/\[CHUNK:[0-9a-f-]{36}\]/i', '', $response->content));
+
         ConversationMessage::create([
             'conversation_id' => $conversation->id,
             'role'            => ConversationMessage::ROLE_USER,
@@ -63,14 +67,14 @@ class ChatService
         $assistantMsg = ConversationMessage::create([
             'conversation_id'   => $conversation->id,
             'role'              => ConversationMessage::ROLE_ASSISTANT,
-            'content'           => $response->content,
+            'content'           => $cleanContent,
             'cited_chunks'      => $citedChunks,
             'prompt_tokens'     => $response->inputTokens,
             'completion_tokens' => $response->outputTokens,
         ]);
 
         return new ChatResponse(
-            content:          $response->content,
+            content:          $cleanContent,
             citedChunks:      $citedChunks,
             promptTokens:     $response->inputTokens,
             completionTokens: $response->outputTokens,
