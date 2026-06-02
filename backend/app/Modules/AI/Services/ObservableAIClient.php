@@ -15,6 +15,7 @@ class ObservableAIClient implements AIClientContract
         private readonly string           $organizationId,
         private readonly string           $documentId,
         private readonly string           $jobType,
+        private readonly ?string          $userId = null,
     ) {}
 
     public function complete(string $prompt): AIResponse
@@ -28,6 +29,7 @@ class ObservableAIClient implements AIClientContract
 
             AiRequest::create([
                 'organization_id'   => $this->organizationId,
+                'user_id'           => $this->userId,
                 'document_id'       => $this->documentId,
                 'job_type'          => $this->jobType,
                 'model'             => $response->model,
@@ -35,10 +37,10 @@ class ObservableAIClient implements AIClientContract
                 'completion_tokens' => $response->outputTokens,
                 'total_tokens'      => $total,
                 'latency_ms'        => $latencyMs,
+                'raw_response'      => $response->content,
                 'status'            => 'success',
             ]);
 
-            // Atomic increment — no-op if no budget record exists for this org
             AiTokenBudget::where('organization_id', $this->organizationId)
                 ->increment('current_month_tokens', $total);
 
@@ -49,6 +51,7 @@ class ObservableAIClient implements AIClientContract
 
             AiRequest::create([
                 'organization_id'   => $this->organizationId,
+                'user_id'           => $this->userId,
                 'document_id'       => $this->documentId,
                 'job_type'          => $this->jobType,
                 'model'             => 'unknown',

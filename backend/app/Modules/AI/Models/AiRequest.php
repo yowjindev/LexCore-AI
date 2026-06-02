@@ -13,6 +13,7 @@ class AiRequest extends Model
 
     protected $fillable = [
         'organization_id',
+        'user_id',
         'document_id',
         'job_type',
         'model',
@@ -23,6 +24,7 @@ class AiRequest extends Model
         'cost_usd',
         'status',
         'error_message',
+        'raw_response',
     ];
 
     protected function casts(): array

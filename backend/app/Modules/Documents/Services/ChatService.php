@@ -5,6 +5,7 @@ namespace App\Modules\Documents\Services;
 use App\Models\User;
 use App\Modules\AI\Contracts\AIClientContract;
 use App\Modules\AI\Embeddings\DTOs\SearchResult;
+use App\Modules\AI\Services\ObservableAIClient;
 use App\Modules\AI\Embeddings\Services\SemanticSearchService;
 use App\Modules\Documents\DTOs\ChatResponse;
 use App\Modules\Documents\Models\ConversationMessage;
@@ -51,7 +52,14 @@ class ChatService
 
         $prompt = $this->buildPrompt($document, $question, $chunks, $history->all());
 
-        $response    = $this->aiClient->complete($prompt);
+        $observable = new ObservableAIClient(
+            $this->aiClient,
+            $document->organization_id,
+            $document->id,
+            'chat',
+            $user->id,
+        );
+        $response = $observable->complete($prompt);
         $citedChunks = $this->parseCitations($response->content, $chunks);
 
         // Strip [CHUNK:uuid] markers from the displayed content — citations are
