@@ -47,4 +47,7 @@ class ClaudeClient implements AIClientContract
             model:        $data['model'],
         );
     }
+
+    public function getProvider(): string { return 'claude'; }
+    public function getModel(): string    { return $this->model; }
 }

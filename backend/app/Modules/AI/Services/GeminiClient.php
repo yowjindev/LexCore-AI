@@ -50,4 +50,7 @@ class GeminiClient implements AIClientContract
             model:        $data['modelVersion'] ?? $this->model,
         );
     }
+
+    public function getProvider(): string { return 'gemini'; }
+    public function getModel(): string    { return $this->model; }
 }

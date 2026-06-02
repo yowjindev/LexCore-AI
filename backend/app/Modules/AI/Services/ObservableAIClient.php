@@ -10,6 +10,9 @@ use Throwable;
 
 class ObservableAIClient implements AIClientContract
 {
+    public function getProvider(): string { return $this->inner->getProvider(); }
+    public function getModel(): string    { return $this->inner->getModel(); }
+
     public function __construct(
         private readonly AIClientContract $inner,
         private readonly string           $organizationId,
