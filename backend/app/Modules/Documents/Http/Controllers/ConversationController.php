@@ -53,6 +53,10 @@ class ConversationController extends Controller
      */
     public function store(Request $request, string $documentId): JsonResponse
     {
+        if (! $request->user()->hasPermissionTo('documents.ai.chat')) {
+            throw new ForbiddenException('You do not have permission to use document chat.');
+        }
+
         $request->validate(['message' => 'required|string|min:2|max:2000']);
 
         $document = $this->getDocumentOrFail($documentId, $request->user());
@@ -90,6 +94,10 @@ class ConversationController extends Controller
      */
     public function reply(Request $request, string $documentId, string $conversationId): JsonResponse
     {
+        if (! $request->user()->hasPermissionTo('documents.ai.chat')) {
+            throw new ForbiddenException('You do not have permission to use document chat.');
+        }
+
         $request->validate(['message' => 'required|string|min:2|max:2000']);
 
         $document = $this->getDocumentOrFail($documentId, $request->user());

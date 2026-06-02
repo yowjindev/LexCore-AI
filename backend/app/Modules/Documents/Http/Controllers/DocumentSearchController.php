@@ -2,6 +2,7 @@
 
 namespace App\Modules\Documents\Http\Controllers;
 
+use App\Exceptions\ForbiddenException;
 use App\Modules\AI\Embeddings\DTOs\SearchResult;
 use App\Modules\AI\Embeddings\Services\SemanticSearchService;
 use App\Modules\Auth\Models\AuditLog;
@@ -15,6 +16,10 @@ class DocumentSearchController extends Controller
 
     public function __invoke(Request $request): JsonResponse
     {
+        if (! $request->user()->hasPermissionTo('documents.search.semantic')) {
+            throw new ForbiddenException('You do not have permission to use semantic search.');
+        }
+
         $request->validate([
             'q'     => 'required|string|min:2|max:500',
             'limit' => 'integer|min:1|max:20',
