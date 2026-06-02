@@ -97,7 +97,10 @@ class AIAnalysisJob implements ShouldQueue
                     throw new AIAnalysisException('No extracted text available for analysis.');
                 }
 
-                $text   = $truncator->truncate($extraction->extracted_text);
+                $text       = $truncator->truncate($extraction->extracted_text);
+                $sanitizer  = app(\App\Modules\AI\Security\PromptSanitizer::class);
+                $sanitizer->flagSuspicious($text);
+                $text       = $sanitizer->wrap($sanitizer->neutralize($text));
                 $prompt = $promptLoader->load('document.analyze', [
                     'content'  => $text,
                     'filename' => $this->document->original_filename,

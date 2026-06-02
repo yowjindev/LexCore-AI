@@ -5,6 +5,7 @@ namespace App\Modules\Documents\Services;
 use App\Models\User;
 use App\Modules\AI\Contracts\AIClientContract;
 use App\Modules\AI\Embeddings\DTOs\SearchResult;
+use App\Modules\AI\Security\PromptSanitizer;
 use App\Modules\AI\Services\ObservableAIClient;
 use App\Modules\AI\Embeddings\Services\SemanticSearchService;
 use App\Modules\Documents\DTOs\ChatResponse;
@@ -21,6 +22,7 @@ class ChatService
     public function __construct(
         private readonly SemanticSearchService $searchService,
         private readonly AIClientContract      $aiClient,
+        private readonly PromptSanitizer       $sanitizer,
     ) {}
 
     public function ask(
@@ -114,12 +116,14 @@ SYSTEM;
         $parts[] = "DOCUMENT: {$document->title} ({$document->original_filename})";
 
         if ($chunks) {
-            $parts[] = "RELEVANT EXCERPTS:";
+            $parts[] = 'RELEVANT EXCERPTS:';
             foreach ($chunks as $chunk) {
-                $parts[] = "[CHUNK:{$chunk->chunkId}] (chunk {$chunk->chunkIndex}):\n{$chunk->chunkText}";
+                $this->sanitizer->flagSuspicious($chunk->chunkText);
+                $wrapped = $this->sanitizer->wrap($chunk->chunkText, 'excerpt');
+                $parts[] = "[CHUNK:{$chunk->chunkId}] (chunk {$chunk->chunkIndex}):\n{$wrapped}";
             }
         } else {
-            $parts[] = "RELEVANT EXCERPTS: (none found — document may not be indexed yet)";
+            $parts[] = 'RELEVANT EXCERPTS: (none found — document may not be indexed yet)';
         }
 
         if (count($history) > 0) {
@@ -130,7 +134,7 @@ SYSTEM;
             }
         }
 
-        $parts[] = "User: {$question}";
+        $parts[] = 'User: ' . $this->sanitizer->wrap($question, 'user_question');
         $parts[] = "Assistant:";
 
         return implode("\n\n", $parts);

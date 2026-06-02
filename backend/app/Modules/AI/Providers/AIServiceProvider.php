@@ -91,6 +91,7 @@ class AIServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Modules\Documents\Services\ChatService::class);
 
         $this->app->singleton(\App\Modules\AI\Security\PiiScanner::class);
+        $this->app->singleton(\App\Modules\AI\Security\PromptSanitizer::class);
     }
 
     public function boot(): void

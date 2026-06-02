@@ -73,10 +73,13 @@ class AIChunkAnalysisJob implements ShouldQueue
                 'analysis_error_message' => null,
             ]);
 
+            $sanitizer   = app(\App\Modules\AI\Security\PromptSanitizer::class);
+            $sanitizer->flagSuspicious($chunk->extracted_text);
+            $safeContent = $sanitizer->wrap($sanitizer->neutralize($chunk->extracted_text));
             $prompt = $promptLoader->load('document.analyze_chunk', [
                 'filename'    => $document->original_filename,
                 'chunk_range' => "pages {$chunk->page_start}-{$chunk->page_end}",
-                'content'     => $chunk->extracted_text,
+                'content'     => $safeContent,
             ]);
 
             $response = $claude->complete($prompt);
