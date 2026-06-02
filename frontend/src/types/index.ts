@@ -194,3 +194,46 @@ export interface ChatReply {
   completion_tokens: number
   model: string
 }
+
+export interface WorkflowTask {
+  id: string
+  organization_id: string
+  assignable_type: string
+  assignable_id: string
+  assigned_to: string | null
+  created_by: string
+  title: string
+  description: string | null
+  status: 'open' | 'in_progress' | 'completed' | 'cancelled'
+  priority: 'low' | 'medium' | 'high' | 'urgent'
+  due_at: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DocumentReview {
+  id: string
+  document_id: string
+  organization_id: string
+  template_id: string | null
+  started_by: string
+  status: 'in_review' | 'approved' | 'rejected' | 'archived'
+  current_stage_index: number
+  due_at: string | null
+  created_at: string
+  updated_at: string
+  stages?: ReviewStage[]
+}
+
+export interface ReviewStage {
+  id: string
+  review_id: string
+  stage_index: number
+  stage_name: string
+  approver_role: string
+  decided_by: string | null
+  decision: 'pending' | 'approved' | 'rejected'
+  comment: string | null
+  decided_at: string | null
+}

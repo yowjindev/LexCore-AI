@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   FileText,
+  CheckSquare,
   ShieldAlert,
   Building2,
   Settings,
@@ -14,6 +15,7 @@ import { cn } from '@/lib/utils'
 const NAV = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/documents', icon: FileText, label: 'Documents' },
+  { href: '/tasks', icon: CheckSquare, label: 'Tasks' },
   { href: '/compliance', icon: ShieldAlert, label: 'Compliance' },
   { href: '/organization', icon: Building2, label: 'Organization' },
   { href: '/settings', icon: Settings, label: 'Settings' },
