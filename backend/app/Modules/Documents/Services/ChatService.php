@@ -2,6 +2,7 @@
 
 namespace App\Modules\Documents\Services;
 
+use App\Exceptions\AI\AIProviderException;
 use App\Models\User;
 use App\Modules\AI\Contracts\AIClientContract;
 use App\Modules\AI\Embeddings\DTOs\SearchResult;
@@ -12,6 +13,7 @@ use App\Modules\Documents\DTOs\ChatResponse;
 use App\Modules\Documents\Models\ConversationMessage;
 use App\Modules\Documents\Models\Document;
 use App\Modules\Documents\Models\DocumentConversation;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ChatService
@@ -62,9 +64,23 @@ class ChatService
             'chat',
             $user->id,
         );
-        $response = $observable->complete($prompt, [
-            'web_search' => (bool) config('ai.web_search_enabled'),
-        ]);
+        $webSearch = (bool) config('ai.web_search_enabled');
+
+        try {
+            $response = $observable->complete($prompt, ['web_search' => $webSearch]);
+        } catch (AIProviderException $e) {
+            // Grounded (web-search) requests draw from a separate, much smaller
+            // provider quota bucket. When that bucket is exhausted, degrade to a
+            // normal excerpt-only answer instead of failing the whole chat turn.
+            if (! $webSearch || ! $this->isQuotaError($e)) {
+                throw $e;
+            }
+            Log::warning('Web-grounded chat hit provider quota — retrying without web search', [
+                'document_id' => $document->id,
+                'error'       => $e->getMessage(),
+            ]);
+            $response = $observable->complete($prompt, ['web_search' => false]);
+        }
         $citedChunks = $this->parseCitations($response->content, $chunks);
 
         // Strip [CHUNK:uuid] markers from the displayed content — citations are
@@ -95,6 +111,12 @@ class ChatService
             conversationId:   $conversation->id,
             messageId:        $assistantMsg->id,
         );
+    }
+
+    private function isQuotaError(AIProviderException $e): bool
+    {
+        return str_contains($e->getMessage(), '429')
+            || str_contains($e->getMessage(), 'RESOURCE_EXHAUSTED');
     }
 
     /**

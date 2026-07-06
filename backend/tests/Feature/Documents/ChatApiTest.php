@@ -271,6 +271,39 @@ class ChatApiTest extends TestCase
             ->assertStatus(201);
     }
 
+    public function test_chat_falls_back_to_no_web_search_on_provider_quota_error(): void
+    {
+        config(['ai.web_search_enabled' => true]);
+
+        $org  = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('staff');
+        $doc  = $this->makeAnalyzedDoc($user);
+
+        $this->mock(EmbeddingClientContract::class, fn ($m) =>
+            $m->shouldReceive('embed')->andReturn(array_fill(0, 768, 0.1))
+        );
+        $this->mock(AIClientContract::class, function ($m) {
+            $m->shouldReceive('complete')
+                ->withArgs(fn (string $prompt, array $options = []) => ($options['web_search'] ?? false) === true)
+                ->once()
+                ->andThrow(new \App\Exceptions\AI\AIProviderException(
+                    'Gemini API request failed (429): {"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}'
+                ));
+            $m->shouldReceive('complete')
+                ->withArgs(fn (string $prompt, array $options = []) => ($options['web_search'] ?? false) === false)
+                ->once()
+                ->andReturn(new AIResponse('Ungrounded answer.', 100, 50, 'gemini-test'));
+        });
+
+        $this->actingAs($user)
+            ->postJson("/api/v1/documents/{$doc->id}/conversations", [
+                'message' => 'Is this clause standard under current law?',
+            ])
+            ->assertStatus(201)
+            ->assertJsonPath('data.content', 'Ungrounded answer.');
+    }
+
     public function test_unauthenticated_cannot_chat(): void
     {
         $org = Organization::factory()->create();
