@@ -6,11 +6,13 @@ use App\Models\User;
 use App\Modules\AI\Contracts\AIClientContract;
 use App\Modules\AI\Contracts\EmbeddingClientContract;
 use App\Modules\AI\DTOs\AIResponse;
+use App\Modules\AI\Embeddings\Models\DocumentChunk;
 use App\Modules\Documents\Models\Document;
 use App\Modules\Documents\Models\DocumentConversation;
 use App\Modules\Organizations\Models\Organization;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -175,6 +177,98 @@ class ChatApiTest extends TestCase
                 'message' => 'Can I see this?',
             ])
             ->assertStatus(404);
+    }
+
+    /** 3072-element float array for test vectors — matches the pgvector column width. */
+    private function fakeVector(float $value = 0.1): array
+    {
+        return array_fill(0, 3072, $value);
+    }
+
+    /** Insert a DocumentChunk with a real pgvector embedding for testing. */
+    private function seedChunkWithVector(
+        string $docId,
+        string $orgId,
+        string $text,
+        int    $idx,
+        array  $vector,
+    ): DocumentChunk {
+        $chunk = DocumentChunk::create([
+            'document_id'     => $docId,
+            'organization_id' => $orgId,
+            'chunk_index'     => $idx,
+            'text'            => $text,
+            'token_count'     => 10,
+            'embedding_model' => 'text-embedding-004',
+            'embedded_at'     => now(),
+        ]);
+        $vectorStr = '[' . implode(',', $vector) . ']';
+        DB::statement(
+            'UPDATE document_chunks SET embedding = ?::vector WHERE id = ?',
+            [$vectorStr, $chunk->id]
+        );
+        return $chunk;
+    }
+
+    public function test_chat_does_not_leak_chunks_from_other_documents_in_same_org(): void
+    {
+        $org  = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('staff');
+
+        $doc      = $this->makeAnalyzedDoc($user);
+        $otherDoc = $this->makeAnalyzedDoc($user);
+
+        $this->seedChunkWithVector($doc->id, $org->id, 'This document chunk.', 0, $this->fakeVector(0.1));
+        $this->seedChunkWithVector($otherDoc->id, $org->id, 'Other document chunk.', 0, $this->fakeVector(0.1));
+
+        $this->mock(EmbeddingClientContract::class, fn ($m) =>
+            $m->shouldReceive('embed')->andReturn($this->fakeVector(0.1))
+        );
+
+        $capturedPrompt = null;
+        $this->mock(AIClientContract::class, function ($m) use (&$capturedPrompt) {
+            $m->shouldReceive('complete')
+                ->withArgs(function (string $prompt) use (&$capturedPrompt) {
+                    $capturedPrompt = $prompt;
+                    return true;
+                })
+                ->andReturn(new AIResponse('The answer is in the document.', 100, 50, 'gemini-test'));
+        });
+
+        $this->actingAs($user)
+            ->postJson("/api/v1/documents/{$doc->id}/conversations", [
+                'message' => 'What does this document say?',
+            ])
+            ->assertStatus(201);
+
+        $this->assertStringContainsString('This document chunk.', $capturedPrompt);
+        $this->assertStringNotContainsString('Other document chunk.', $capturedPrompt);
+    }
+
+    public function test_chat_requests_web_search_when_enabled(): void
+    {
+        config(['ai.web_search_enabled' => true]);
+
+        $org  = Organization::factory()->create();
+        $user = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('staff');
+        $doc  = $this->makeAnalyzedDoc($user);
+
+        $this->mock(EmbeddingClientContract::class, fn ($m) =>
+            $m->shouldReceive('embed')->andReturn(array_fill(0, 768, 0.1))
+        );
+        $this->mock(AIClientContract::class, fn ($m) =>
+            $m->shouldReceive('complete')
+                ->withArgs(fn (string $prompt, array $options = []) => ($options['web_search'] ?? false) === true)
+                ->andReturn(new AIResponse('Grounded answer.', 100, 50, 'gemini-test'))
+        );
+
+        $this->actingAs($user)
+            ->postJson("/api/v1/documents/{$doc->id}/conversations", [
+                'message' => 'Is this clause standard under current law?',
+            ])
+            ->assertStatus(201);
     }
 
     public function test_unauthenticated_cannot_chat(): void

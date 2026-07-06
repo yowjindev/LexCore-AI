@@ -16,19 +16,25 @@ class GeminiClient implements AIClientContract
         private int    $maxTokens = 4096,
     ) {}
 
-    public function complete(string $prompt): AIResponse
+    public function complete(string $prompt, array $options = []): AIResponse
     {
         $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent";
 
+        $payload = [
+            'contents'          => [['parts' => [['text' => $prompt]]]],
+            'generationConfig'  => [
+                'temperature'     => 0.1,
+                'maxOutputTokens' => $this->maxTokens,
+            ],
+        ];
+
+        if ($options['web_search'] ?? false) {
+            $payload['tools'] = [['google_search' => (object) []]];
+        }
+
         try {
             $response = Http::withQueryParameters(['key' => $this->apiKey])
-                ->post($url, [
-                    'contents'          => [['parts' => [['text' => $prompt]]]],
-                    'generationConfig'  => [
-                        'temperature'     => 0.1,
-                        'maxOutputTokens' => $this->maxTokens,
-                    ],
-                ]);
+                ->post($url, $payload);
         } catch (ConnectionException $e) {
             throw new AIProviderException('Gemini API connection failed: ' . $e->getMessage());
         }
@@ -39,7 +45,9 @@ class GeminiClient implements AIClientContract
 
         $data = $response->json();
 
-        $content = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
+        // Grounded responses may split the answer across multiple text parts
+        $parts   = $data['candidates'][0]['content']['parts'] ?? [];
+        $content = implode('', array_column($parts, 'text'));
         // Strip markdown code fences Gemini sometimes adds
         $content = preg_replace('/^```(?:json)?\s*\n?|\n?```\s*$/m', '', trim($content));
 

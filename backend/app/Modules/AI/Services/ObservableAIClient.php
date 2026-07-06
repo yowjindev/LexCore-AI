@@ -21,12 +21,12 @@ class ObservableAIClient implements AIClientContract
         private readonly ?string          $userId = null,
     ) {}
 
-    public function complete(string $prompt): AIResponse
+    public function complete(string $prompt, array $options = []): AIResponse
     {
         $start = microtime(true);
 
         try {
-            $response  = $this->inner->complete($prompt);
+            $response  = $this->inner->complete($prompt, $options);
             $latencyMs = (int) ((microtime(true) - $start) * 1000);
             $total     = $response->inputTokens + $response->outputTokens;
 

@@ -3,6 +3,10 @@
 return [
     'driver' => env('AI_DRIVER', 'claude'),
 
+    // Let document chat ground answers with live web results (provider-native
+    // search tools). Analysis/risk jobs never use this — chat only.
+    'web_search_enabled' => (bool) env('AI_WEB_SEARCH_ENABLED', true),
+
     'claude' => [
         'api_key'    => env('CLAUDE_API_KEY'),
         'model'      => env('CLAUDE_MODEL', 'claude-sonnet-4-6'),

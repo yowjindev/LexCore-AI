@@ -63,6 +63,62 @@ class ClaudeClientTest extends TestCase
         });
     }
 
+    public function test_complete_omits_tools_by_default(): void
+    {
+        Http::fake([
+            'api.anthropic.com/*' => Http::response([
+                'content' => [['type' => 'text', 'text' => 'ok']],
+                'usage'   => ['input_tokens' => 10, 'output_tokens' => 5],
+                'model'   => 'claude-test-model',
+            ], 200),
+        ]);
+
+        $this->client->complete('Test prompt');
+
+        Http::assertSent(fn (Request $request) => ! isset($request['tools']));
+    }
+
+    public function test_complete_sends_web_search_tool_when_option_enabled(): void
+    {
+        Http::fake([
+            'api.anthropic.com/*' => Http::response([
+                'content' => [['type' => 'text', 'text' => 'ok']],
+                'usage'   => ['input_tokens' => 10, 'output_tokens' => 5],
+                'model'   => 'claude-test-model',
+            ], 200),
+        ]);
+
+        $this->client->complete('Test prompt', ['web_search' => true]);
+
+        Http::assertSent(fn (Request $request) =>
+            isset($request['tools'])
+            && $request['tools'][0]['type'] === 'web_search_20250305'
+            && $request['tools'][0]['name'] === 'web_search'
+        );
+    }
+
+    public function test_complete_concatenates_multiple_text_blocks(): void
+    {
+        // Web-search responses interleave server_tool_use / web_search_tool_result
+        // blocks with text blocks — only the text blocks form the answer.
+        Http::fake([
+            'api.anthropic.com/*' => Http::response([
+                'content' => [
+                    ['type' => 'server_tool_use', 'id' => 'tu_1', 'name' => 'web_search', 'input' => ['query' => 'q']],
+                    ['type' => 'web_search_tool_result', 'tool_use_id' => 'tu_1', 'content' => []],
+                    ['type' => 'text', 'text' => 'First part.'],
+                    ['type' => 'text', 'text' => 'Second part.'],
+                ],
+                'usage'   => ['input_tokens' => 10, 'output_tokens' => 5],
+                'model'   => 'claude-test-model',
+            ], 200),
+        ]);
+
+        $response = $this->client->complete('Test prompt', ['web_search' => true]);
+
+        $this->assertSame("First part.\nSecond part.", $response->content);
+    }
+
     public function test_complete_throws_ai_provider_exception_on_api_failure(): void
     {
         Http::fake([

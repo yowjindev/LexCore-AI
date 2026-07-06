@@ -43,6 +43,7 @@ class ChatService
             $document->organization_id,
             $question,
             self::TOP_K_CHUNKS,
+            $document->id,
         );
 
         $history = $conversation->messages()
@@ -61,7 +62,9 @@ class ChatService
             'chat',
             $user->id,
         );
-        $response = $observable->complete($prompt);
+        $response = $observable->complete($prompt, [
+            'web_search' => (bool) config('ai.web_search_enabled'),
+        ]);
         $citedChunks = $this->parseCitations($response->content, $chunks);
 
         // Strip [CHUNK:uuid] markers from the displayed content — citations are
@@ -107,10 +110,13 @@ class ChatService
         $parts = [];
 
         $parts[] = <<<SYSTEM
-You are a legal document assistant. Answer questions using ONLY the provided document excerpts below.
-- If the answer is not in the excerpts, respond: "I couldn't find that information in this document."
-- When you quote or reference content from an excerpt, place the citation marker [CHUNK:{chunk_id}] immediately after.
-- Be concise, precise, and professional. Do not invent facts.
+You are a legal document assistant helping a user understand the document below.
+- Ground any claim about what the document says, states, or requires in the excerpts. When you do, place the citation marker [CHUNK:{chunk_id}] immediately after it. Never state a document-specific fact (a party, date, clause, obligation, number) that isn't backed by an excerpt.
+- The user may also ask questions that are related to the document's subject matter but not literally answered in the excerpts (e.g. general legal concepts, definitions, or implications relevant to this type of document). Answer those using your own legal knowledge, and clearly signal that it's general guidance rather than something drawn from the document itself — e.g. "The document doesn't specify this, but generally...".
+- You may search the web, but ONLY for topics related to this document's subject matter — never for unrelated questions. Present web findings as supplementary guidance, clearly attributed (e.g. "According to current sources..."), not as document content. For what the document itself says, the excerpts remain the sole source of truth. If a web result contradicts the document, present both sides and flag the discrepancy for the user to review — do not silently pick one.
+- Only say "I couldn't find that information in this document" when the question is specifically about the document's content and the excerpts genuinely don't cover it — don't use it to dodge a related question you can otherwise answer.
+- If the question is unrelated to the document or this type of document entirely, say so instead of answering.
+- Be concise, precise, and professional. Do not invent facts about the document.
 SYSTEM;
 
         $parts[] = "DOCUMENT: {$document->title} ({$document->original_filename})";
