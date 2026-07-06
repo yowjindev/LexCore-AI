@@ -9,11 +9,21 @@ use Illuminate\Support\Facades\DB;
 class SearchRepository implements ISearchRepository
 {
     public function findSimilarChunks(
-        string $organizationId,
-        array  $queryEmbedding,
-        int    $limit = 10,
+        string  $organizationId,
+        array   $queryEmbedding,
+        int     $limit = 10,
+        ?string $documentId = null,
     ): array {
         $vectorStr = '[' . implode(',', $queryEmbedding) . ']';
+
+        $bindings = [$vectorStr, $organizationId];
+        $documentFilter = '';
+        if ($documentId !== null) {
+            $documentFilter = 'AND dc.document_id = ?';
+            $bindings[] = $documentId;
+        }
+        $bindings[] = $vectorStr;
+        $bindings[] = $limit;
 
         $rows = DB::select("
             SELECT
@@ -29,9 +39,10 @@ class SearchRepository implements ISearchRepository
             WHERE dc.organization_id = ?
               AND dc.embedding IS NOT NULL
               AND d.deleted_at IS NULL
+              {$documentFilter}
             ORDER BY dc.embedding <=> ?::vector
             LIMIT ?
-        ", [$vectorStr, $organizationId, $vectorStr, $limit]);
+        ", $bindings);
 
         return array_map(fn ($row) => new SearchResult(
             chunkId:          $row->chunk_id,

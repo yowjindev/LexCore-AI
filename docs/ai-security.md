@@ -94,5 +94,5 @@ Every AI API call stores the raw model response in `ai_requests.raw_response`. A
 
 - **PII redaction is not implemented.** Detection only — PII-flagged documents are still sent to external AI APIs in Phase 2H.
 - **Injection flagging is advisory.** No automated blocking occurs on suspicious patterns.
-- **Semantic search has no result-level access control.** Any org member with `documents.search.semantic` can find chunks from any document in the organisation's corpus.
+- **Semantic search has no result-level access control.** Any org member with `documents.search.semantic` can find chunks from any document in the organisation's corpus. This is by design for the standalone search feature. Document chat (`documents.ai.chat`) is scoped to the single document being viewed — `SemanticSearchService::search()` accepts an optional `documentId` filter, used by `ChatService` but not by the standalone search endpoint.
 - **Provider-specific delimiters.** The XML approach works well for Gemini and Claude. A future provider may require a different strategy in `PromptSanitizer`.

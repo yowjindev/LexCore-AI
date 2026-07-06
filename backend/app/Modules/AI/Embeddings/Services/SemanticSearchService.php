@@ -22,8 +22,12 @@ class SemanticSearchService
      *
      * @return SearchResult[]
      */
-    public function search(string $organizationId, string $query, int $limit = 10): array
-    {
+    public function search(
+        string  $organizationId,
+        string  $query,
+        int     $limit = 10,
+        ?string $documentId = null,
+    ): array {
         // Cache the query embedding for 5 minutes — embedding API calls are not free
         $cacheKey = 'search:' . $organizationId . ':' . md5($query);
 
@@ -31,6 +35,6 @@ class SemanticSearchService
             $this->embeddingClient->embed($query)
         );
 
-        return $this->searchRepository->findSimilarChunks($organizationId, $embedding, $limit);
+        return $this->searchRepository->findSimilarChunks($organizationId, $embedding, $limit, $documentId);
     }
 }
