@@ -15,15 +15,24 @@ class TaskController extends Controller
     public function index(Request $request): JsonResponse
     {
         $tasks = Task::where('organization_id', $request->user()->organization_id)
+            ->with('assignedTo:id,name')
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
             ->when($request->filled('assigned_to'), fn ($q) => $q->where('assigned_to', $request->input('assigned_to')))
             ->orderByRaw("CASE priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END")
             ->orderBy('created_at', 'desc')
             ->get();
 
+        // attributesToArray() keeps the raw assigned_to UUID column — merging in
+        // the assignedTo relation directly would silently overwrite it with the
+        // nested user object, since both serialize under the same JSON key.
+        $data = $tasks->map(fn (Task $t) => [
+            ...$t->attributesToArray(),
+            'assignee' => $t->assignedTo ? ['id' => $t->assignedTo->id, 'name' => $t->assignedTo->name] : null,
+        ]);
+
         return response()->json([
             'success' => true,
-            'data'    => $tasks,
+            'data'    => $data,
             'message' => 'OK',
             'meta'    => ['count' => $tasks->count()],
         ]);

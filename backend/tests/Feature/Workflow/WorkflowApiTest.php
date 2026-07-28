@@ -124,6 +124,82 @@ class WorkflowApiTest extends TestCase
             ->assertJsonPath('data.status', Task::STATUS_COMPLETED);
     }
 
+    public function test_task_can_be_assigned_to_org_member(): void
+    {
+        $org      = Organization::factory()->create();
+        $manager  = User::factory()->create(['organization_id' => $org->id]);
+        $manager->assignRole('manager');
+        $assignee = User::factory()->create(['organization_id' => $org->id, 'name' => 'Jane Approver']);
+        $assignee->assignRole('staff');
+
+        $flag = ComplianceFlag::factory()->create(['organization_id' => $org->id]);
+        $task = Task::create([
+            'organization_id' => $org->id,
+            'assignable_type' => 'compliance_flag',
+            'assignable_id'   => $flag->id,
+            'created_by'      => $manager->id,
+            'title'           => 'Needs an owner',
+            'status'          => Task::STATUS_OPEN,
+            'priority'        => Task::PRIORITY_HIGH,
+        ]);
+
+        $this->actingAs($manager)
+            ->patchJson("/api/v1/tasks/{$task->id}", ['action' => 'assign', 'assigned_to' => $assignee->id])
+            ->assertStatus(200)
+            ->assertJsonPath('data.assigned_to', $assignee->id)
+            ->assertJsonPath('data.status', Task::STATUS_IN_PROGRESS);
+    }
+
+    public function test_cannot_assign_task_to_user_outside_organization(): void
+    {
+        $org1     = Organization::factory()->create();
+        $org2     = Organization::factory()->create();
+        $manager  = User::factory()->create(['organization_id' => $org1->id]);
+        $manager->assignRole('manager');
+        $outsider = User::factory()->create(['organization_id' => $org2->id]);
+
+        $flag = ComplianceFlag::factory()->create(['organization_id' => $org1->id]);
+        $task = Task::create([
+            'organization_id' => $org1->id,
+            'assignable_type' => 'compliance_flag',
+            'assignable_id'   => $flag->id,
+            'created_by'      => $manager->id,
+            'title'           => 'Needs an owner',
+            'status'          => Task::STATUS_OPEN,
+            'priority'        => Task::PRIORITY_HIGH,
+        ]);
+
+        $this->actingAs($manager)
+            ->patchJson("/api/v1/tasks/{$task->id}", ['action' => 'assign', 'assigned_to' => $outsider->id])
+            ->assertStatus(404);
+    }
+
+    public function test_task_index_includes_assignee_name(): void
+    {
+        $org      = Organization::factory()->create();
+        $user     = User::factory()->create(['organization_id' => $org->id]);
+        $user->assignRole('staff');
+        $assignee = User::factory()->create(['organization_id' => $org->id, 'name' => 'Jane Approver']);
+
+        $flag = ComplianceFlag::factory()->create(['organization_id' => $org->id]);
+        $task = Task::create([
+            'organization_id' => $org->id,
+            'assignable_type' => 'compliance_flag',
+            'assignable_id'   => $flag->id,
+            'assigned_to'     => $assignee->id,
+            'created_by'      => $user->id,
+            'title'           => 'Assigned task',
+            'status'          => Task::STATUS_IN_PROGRESS,
+            'priority'        => Task::PRIORITY_MEDIUM,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/v1/tasks')
+            ->assertStatus(200)
+            ->assertJsonPath('data.0.assigned_to', $assignee->id)
+            ->assertJsonPath('data.0.assignee.name', 'Jane Approver');
+    }
+
     public function test_unauthenticated_cannot_access_workflow(): void
     {
         $this->getJson('/api/v1/tasks')->assertStatus(401);

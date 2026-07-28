@@ -201,6 +201,7 @@ export interface WorkflowTask {
   assignable_type: string
   assignable_id: string
   assigned_to: string | null
+  assignee: { id: string; name: string } | null
   created_by: string
   title: string
   description: string | null

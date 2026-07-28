@@ -2,12 +2,13 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CheckSquare, Clock, AlertTriangle, XCircle, CheckCircle2, X } from 'lucide-react'
+import { CheckSquare, Clock, AlertTriangle, XCircle, CheckCircle2, X, UserPlus } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner'
 import { parseApiError } from '@/lib/errors'
 import { getTasks, updateTask } from '@/lib/api/workflow'
-import type { WorkflowTask } from '@/types'
+import { getMembers } from '@/lib/api/organization'
+import type { WorkflowTask, User } from '@/types'
 
 const PRIORITY_CONFIG = {
   urgent: { label: 'Urgent',  color: 'bg-red-500/10 text-red-600 border-red-200' },
@@ -32,9 +33,11 @@ function PriorityBadge({ priority }: { priority: WorkflowTask['priority'] }) {
   )
 }
 
-function TaskCard({ task, onAction, isPending }: {
+function TaskCard({ task, members, onAction, onAssign, isPending }: {
   task: WorkflowTask
+  members: User[]
   onAction: (id: string, action: 'complete' | 'cancel') => void
+  onAssign: (id: string, assignedTo: string) => void
   isPending: boolean
 }) {
   const isOpen = task.status === 'open' || task.status === 'in_progress'
@@ -49,6 +52,25 @@ function TaskCard({ task, onAction, isPending }: {
         </div>
         <PriorityBadge priority={task.priority} />
       </div>
+
+      {isOpen && (
+        <div className="flex items-center gap-1.5">
+          <UserPlus size={12} className="text-muted-foreground shrink-0" />
+          <select
+            value={task.assigned_to ?? ''}
+            onChange={(e) => e.target.value && onAssign(task.id, e.target.value)}
+            disabled={isPending}
+            className="text-xs rounded-md border border-input bg-background px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+          >
+            <option value="" disabled>
+              {task.assignee ? task.assignee.name : 'Unassigned'}
+            </option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-2 pt-1">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -93,9 +115,24 @@ export default function TasksPage() {
     queryFn:  () => getTasks(status ? { status } : undefined),
   })
 
+  const { data: members } = useQuery({
+    queryKey: ['organization', 'members'],
+    queryFn:  getMembers,
+  })
+
   const action = useMutation({
     mutationFn: ({ id, act }: { id: string; act: 'complete' | 'cancel' }) =>
       updateTask(id, act),
+    onSuccess: () => {
+      setActionError('')
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
+    },
+    onError: (err) => setActionError(parseApiError(err)),
+  })
+
+  const assign = useMutation({
+    mutationFn: ({ id, assignedTo }: { id: string; assignedTo: string }) =>
+      updateTask(id, 'assign', assignedTo),
     onSuccess: () => {
       setActionError('')
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
@@ -150,8 +187,10 @@ export default function TasksPage() {
             <TaskCard
               key={task.id}
               task={task}
+              members={members ?? []}
               onAction={(id, act) => action.mutate({ id, act })}
-              isPending={action.isPending}
+              onAssign={(id, assignedTo) => assign.mutate({ id, assignedTo })}
+              isPending={action.isPending || assign.isPending}
             />
           ))}
         </div>
